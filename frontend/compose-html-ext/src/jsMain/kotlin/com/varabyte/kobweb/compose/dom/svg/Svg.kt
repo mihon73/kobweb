@@ -6,6 +6,7 @@ package com.varabyte.kobweb.compose.dom.svg
 import androidx.compose.runtime.*
 import com.varabyte.kobweb.compose.css.*
 import com.varabyte.kobweb.compose.dom.GenericTag
+import com.varabyte.kobweb.compose.util.titleCamelCaseToKebabCase
 import org.jetbrains.compose.web.attributes.AttrsScope
 import org.jetbrains.compose.web.attributes.HtmlAttrMarker
 import org.jetbrains.compose.web.css.*
@@ -19,6 +20,7 @@ import org.w3c.dom.svg.SVGElement
 import org.w3c.dom.svg.SVGEllipseElement
 import org.w3c.dom.svg.SVGGElement
 import org.w3c.dom.svg.SVGGradientElement
+import org.w3c.dom.svg.SVGImageElement
 import org.w3c.dom.svg.SVGLineElement
 import org.w3c.dom.svg.SVGLinearGradientElement
 import org.w3c.dom.svg.SVGPathElement
@@ -78,12 +80,28 @@ class SVGTransformScope internal constructor() {
         })
     }
 
+    fun translateX(value: Number) {
+        translate(value)
+    }
+
+    fun translateY(value: Number) {
+        translate(0, value)
+    }
+
     fun scale(x: Number, y: Number? = null) {
         transformCommands.add(buildString {
             append("scale($x")
             y?.let { append(" $it") }
             append(")")
         })
+    }
+
+    fun scaleX(value: Number) {
+        scale(value)
+    }
+
+    fun scaleY(value: Number) {
+        scale(1, value)
     }
 
     fun rotate(angle: Number, x: Number? = null, y: Number? = null) {
@@ -151,9 +169,16 @@ abstract class SVGElementAttrsScope<E : SVGElement> protected constructor(attrs:
 
 // Reformat to value expected by SVG tag, e.g. "CurrentColor" -> "currentColor"
 // Enums have to be capitalized title case for this method to work.
-private fun <E : Enum<E>> Enum<E>.toSvgValue() = name.replaceFirstChar { it.lowercase() }
+internal fun <E : Enum<E>> Enum<E>.toSvgValue() = name.replaceFirstChar { it.lowercase() }
 
-// region SVG paint attributes (https://www.w3.org/TR/SVG11/painting.html#SpecifyingPaint)
+// region Common SVG enumerations
+
+enum class SVGCrossOrigin {
+    Anonymous,
+    UseCredentials;
+
+    override fun toString() = this.name.titleCamelCaseToKebabCase()
+}
 
 enum class SVGFillType {
     None,
@@ -192,11 +217,34 @@ enum class SVGFillRule {
     override fun toString() = this.toSvgValue()
 }
 
+enum class SVGAspectRatioAlignment {
+    None,
+    XMinYMin,
+    XMidYMin,
+    XMaxYMin,
+    XMinYMid,
+    XMidYMid,
+    XMaxYMid,
+    XMinYMax,
+    XMidYMax,
+    XMaxYMax;
+
+    override fun toString() = this.toSvgValue()
+}
+
+enum class SVGAspectRatioScale {
+    Meet,
+    Slice;
+
+    override fun toString() = this.toSvgValue()
+}
+
+
 // endregion
 
 // region Shared SVG traits
 
-private interface CenterCoordinateAttrs<T : SVGElement> : AttrsScope<T> {
+internal interface CenterCoordinateAttrs<T : SVGElement> : AttrsScope<T> {
     fun cx(value: Number) {
         attr("cx", value.toString())
     }
@@ -214,7 +262,7 @@ private interface CenterCoordinateAttrs<T : SVGElement> : AttrsScope<T> {
     }
 }
 
-private interface CoordinateAttrs<T : SVGElement> : AttrsScope<T> {
+internal interface CoordinateAttrs<T : SVGElement> : AttrsScope<T> {
     fun x(value: Number) {
         attr("x", value.toString())
     }
@@ -232,7 +280,13 @@ private interface CoordinateAttrs<T : SVGElement> : AttrsScope<T> {
     }
 }
 
-private interface LengthAttrs<T : SVGElement> : AttrsScope<T> {
+internal interface CrossOriginAttrs<T : SVGElement> : AttrsScope<T> {
+    fun crossOrigin(value: SVGCrossOrigin) {
+        attr("crossOrigin", value.toString())
+    }
+}
+
+internal interface LengthAttrs<T : SVGElement> : AttrsScope<T> {
     fun height(value: Number) {
         attr("height", value.toString())
     }
@@ -250,22 +304,14 @@ private interface LengthAttrs<T : SVGElement> : AttrsScope<T> {
     }
 }
 
-private interface PointsAttrs<T : SVGElement> : AttrsScope<T> {
+internal interface PointsAttrs<T : SVGElement> : AttrsScope<T> {
     fun points(vararg pairs: Pair<Number, Number>) {
         val pointString = pairs.joinToString(" ") { "${it.first},${it.second}" }
         attr("points", pointString)
     }
 }
 
-private interface ViewBoxAttrs<T : SVGElement> : AttrsScope<T> {
-    fun viewBox(x: Number, y: Number, width: Number, height: Number) {
-        attr("viewBox", "$x $y $width $height")
-    }
-}
-
-// endregion
-
-abstract class SVGGraphicalElementAttrsScope<E : SVGElement>(attrs: AttrsScope<E>) : SVGElementAttrsScope<E>(attrs) {
+internal interface PresentationAttrs<T : SVGElement> : AttrsScope<T> {
     fun stroke(value: CSSColorValue) = this.attr("stroke", value.toString())
     fun stroke(value: SVGStrokeType) = this.attr("stroke", value.toString())
     fun stroke(id: SvgId) = this.attr("stroke", id.urlReference)
@@ -299,7 +345,48 @@ abstract class SVGGraphicalElementAttrsScope<E : SVGElement>(attrs: AttrsScope<E
     fun fillRule(value: SVGFillRule) = this.attr("fill-rule", value.toString())
 
     fun fillOpacity(value: Number) = this.attr("fill-opacity", value.toString())
+
+    fun filter(id: SvgId) = this.attr("filter", id.urlReference)
+
+    fun floodColor(color: CSSColorValue) = attr("flood-color", color.toString())
+    fun floodOpacity(value: Number) = attr("flood-opacity", value.toString())
+
+    fun lightingColor(color: CSSColorValue) = attr("lighting-color", color.toString())
 }
+
+internal interface PreserveAspectRatioAttrs<T : SVGElement> : AttrsScope<T> {
+    fun preserveAspectRatio(alignment: SVGAspectRatioAlignment, scale: SVGAspectRatioScale? = null) {
+        attr("preserveAspectRatio", buildString {
+            append(alignment)
+            scale?.let { append(' '); append(it) }
+        })
+    }
+}
+
+/**
+ * Parameters that can be used to set the viewBox attribute of an SVG.
+ */
+class ViewBox(val x: Int, val y: Int, val width: Int, val height: Int) {
+    companion object {
+        fun sized(width: Int, height: Int = width) = ViewBox(0, 0, width, height)
+    }
+}
+
+
+internal interface ViewBoxAttrs<T : SVGElement> : AttrsScope<T> {
+    fun viewBox(x: Number, y: Number, width: Number, height: Number) {
+        attr("viewBox", "$x $y $width $height")
+    }
+
+    fun viewBox(viewBox: ViewBox) {
+        viewBox(viewBox.x, viewBox.y, viewBox.width, viewBox.height)
+    }
+}
+
+// endregion
+
+abstract class SVGGraphicalElementAttrsScope<E : SVGElement>(attrs: AttrsScope<E>) : SVGElementAttrsScope<E>(attrs),
+    PresentationAttrs<E>
 
 // Useful for attributes shared between top-level svg elements and group elements
 abstract class SVGContainerElementAttrsScope<E : SVGElement>(attrs: AttrsScope<E>) :
@@ -561,9 +648,28 @@ fun ElementScope<SVGGradientElement>.Stop(
     }
 }
 
+enum class SVGPatternUnits {
+    UserSpaceOnUse,
+    ObjectBoundingBox;
+
+    override fun toString() = this.toSvgValue()
+}
+
 class SVGPatternAttrsScope private constructor(id: SvgId, attrs: AttrsScope<SVGPatternElement>) :
     SVGContainerElementAttrsScope<SVGPatternElement>(attrs.id(id.toString())),
     CoordinateAttrs<SVGPatternElement>, LengthAttrs<SVGPatternElement>, ViewBoxAttrs<SVGPatternElement> {
+
+    fun patternContentUnits(value: SVGPatternUnits) {
+        attr("patternContentUnits", value.toString())
+    }
+
+    fun patternUnits(value: SVGPatternUnits) {
+        attr("patternUnits", value.toString())
+    }
+
+    fun preserveAspectRatio(value: SVGAspectRatioAlignment) {
+        attr("preserveAspectRatio", value.toString())
+    }
 
     companion object {
         operator fun invoke(
@@ -623,15 +729,21 @@ fun ElementScope<SVGElement>.Symbol(
     GenericTag("symbol", "http://www.w3.org/2000/svg", SVGSymbolAttrsScope(id, attrs), content)
 }
 
-class SVGUseAttrsScope private constructor(href: String, attrs: AttrsScope<SVGUseElement>) :
-    SVGGraphicalElementAttrsScope<SVGUseElement>(attrs.attr("href", href.prefixWithHash())),
-    CoordinateAttrs<SVGUseElement>, LengthAttrs<SVGUseElement> {
+class SVGUseAttrsScope private constructor(href: String?, attrs: AttrsScope<SVGUseElement>) :
+    CoordinateAttrs<SVGUseElement>, LengthAttrs<SVGUseElement>,
+    SVGGraphicalElementAttrsScope<SVGUseElement>(
+        if (href != null) {
+            attrs.attr("href", href.prefixWithHash())
+        } else {
+            attrs
+        }
+    ) {
 
     companion object {
         private fun String.prefixWithHash() = if (startsWith("#")) this else "#$this"
 
         operator fun invoke(
-            href: String,
+            href: String?,
             attrs: (SVGUseAttrsScope.() -> Unit)
         ): AttrBuilderContext<SVGUseElement> {
             return { SVGUseAttrsScope(href, this).attrs() }
@@ -643,12 +755,11 @@ class SVGUseAttrsScope private constructor(href: String, attrs: AttrsScope<SVGUs
 // https://developer.mozilla.org/en-US/docs/Web/SVG/Element/pattern
 @Composable
 fun ElementScope<SVGElement>.Use(
-    href: String,
+    href: String? = null,
     attrs: (SVGUseAttrsScope.() -> Unit),
 ) {
     GenericTag("use", "http://www.w3.org/2000/svg", SVGUseAttrsScope(href, attrs))
 }
-
 
 // endregion
 
@@ -765,6 +876,45 @@ fun ElementScope<SVGElement>.Group(
     GenericTag("g", "http://www.w3.org/2000/svg", attrs?.let { SVGGroupAttrsScope(it) }, content)
 }
 
+class SVGImageAttrsScope private constructor(attrs: AttrsScope<SVGImageElement>) :
+    SVGGraphicalElementAttrsScope<SVGImageElement>(attrs), CoordinateAttrs<SVGImageElement>,
+    LengthAttrs<SVGImageElement>, PreserveAspectRatioAttrs<SVGImageElement>, CrossOriginAttrs<SVGImageElement> {
+
+    companion object {
+        operator fun invoke(attrs: SVGImageAttrsScope.() -> Unit): AttrBuilderContext<SVGImageElement> {
+            return { SVGImageAttrsScope(this).attrs() }
+        }
+    }
+
+    fun href(value: String) {
+        attr("href", value)
+    }
+}
+
+/**
+ * Type-safe API for creating an [SVGImageElement].
+ *
+ * For example, to create a Image from (3, 12) to (21, 12):
+ *
+ * ```
+ * Svg {
+ *  Image {
+ *      href("image.png")
+ *      x(10.percent)
+ *      y(10.percent)
+ *      width(80.percent)
+ *      height(80.percent)
+ *  }
+ * }
+ * ```
+ *
+ * @see <a href="https://developer.mozilla.org/en-US/docs/Web/SVG/Element/image">SVG Element Image (Mozilla Docs)</a>
+ */
+@Composable
+fun ElementScope<SVGElement>.Image(attrs: SVGImageAttrsScope.() -> Unit) {
+    GenericTag("image", "http://www.w3.org/2000/svg", SVGImageAttrsScope(attrs))
+}
+
 
 class SVGLineAttrsScope private constructor(attrs: AttrsScope<SVGLineElement>) :
     SVGGraphicalElementAttrsScope<SVGLineElement>(attrs) {
@@ -826,7 +976,6 @@ class SVGLineAttrsScope private constructor(attrs: AttrsScope<SVGLineElement>) :
  *
  * @see <a href="https://developer.mozilla.org/en-US/docs/Web/SVG/Element/line">SVG Element Line (Mozilla Docs)</a>
  */
-
 @Composable
 fun ElementScope<SVGElement>.Line(attrs: SVGLineAttrsScope.() -> Unit) {
     GenericTag("line", "http://www.w3.org/2000/svg", SVGLineAttrsScope(attrs))

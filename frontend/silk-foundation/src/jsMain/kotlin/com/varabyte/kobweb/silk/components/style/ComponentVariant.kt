@@ -7,20 +7,20 @@ import com.varabyte.kobweb.silk.components.util.internal.CacheByPropertyNameDele
 import org.jetbrains.compose.web.css.*
 
 sealed class ComponentVariant {
-    object Empty : ComponentVariant() {
-        override fun addStylesInto(styleSheet: StyleSheet) = Unit
-
-        @Composable
-        override fun toModifier() = Modifier
-    }
 
     infix fun then(next: ComponentVariant): ComponentVariant {
-        return if (next === Empty) this
-        else if (this === Empty) next
-        else CompositeComponentVariant(this, next)
+        return CompositeComponentVariant(this, next)
     }
 
-    internal abstract fun addStylesInto(styleSheet: StyleSheet)
+    /**
+     * Add this [ComponentVariant]'s styles to the target [StyleSheet].
+     *
+     * @return The CSS class selectors associated specifically with this variant. For example, if the selector
+     *  for this variant is `.some-style.some-variant`, then this method will only contain `some-variant`.
+     *
+     *  @see ComponentStyle.addStylesInto
+     */
+    internal abstract fun addStylesInto(styleSheet: StyleSheet): ClassSelectors
 
     @Composable
     internal abstract fun toModifier(): Modifier
@@ -29,10 +29,7 @@ sealed class ComponentVariant {
 /**
  * A default [ComponentVariant] implementation that represents a single variant style.
  */
-class SimpleComponentVariant(
-    internal val style: ComponentStyle,
-    internal val baseStyle: ComponentStyle,
-) : ComponentVariant() {
+internal class SimpleComponentVariant(val style: ComponentStyle, val baseStyle: ComponentStyle) : ComponentVariant() {
     /**
      * The raw variant name, unqualified by its parent base style.
      *
@@ -41,24 +38,23 @@ class SimpleComponentVariant(
     val name: String
         get() = style.name.removePrefix("${baseStyle.name}-")
 
-    override fun addStylesInto(styleSheet: StyleSheet) {
+    override fun addStylesInto(styleSheet: StyleSheet): ClassSelectors {
         // If you are using a variant, require it be associated with a tag already associated with the base style
         // e.g. if you have a link variant ("silk-link-undecorated") it should only be applied if the tag is also
         // a link (so this would be registered as ".silk-link.silk-link-undecorated").
         // To put it another way, if you use a link variant with a surface widget, it won't be applied.
-        style.addStylesInto(styleSheet, ".${baseStyle.name}.${style.name}")
+        return style.addStylesInto(styleSheet, ".${baseStyle.name}.${style.name}")
     }
 
     @Composable
     override fun toModifier() = style.toModifier()
-    internal fun intoImmutableStyle() = style.intoImmutableStyle()
+    fun intoImmutableStyle(classSelectors: ClassSelectors) = style.intoImmutableStyle(classSelectors)
 }
 
 private class CompositeComponentVariant(private val head: ComponentVariant, private val tail: ComponentVariant) :
     ComponentVariant() {
-    override fun addStylesInto(styleSheet: StyleSheet) {
-        head.addStylesInto(styleSheet)
-        tail.addStylesInto(styleSheet)
+    override fun addStylesInto(styleSheet: StyleSheet): ClassSelectors {
+        return head.addStylesInto(styleSheet) + tail.addStylesInto(styleSheet)
     }
 
     @Composable
@@ -66,8 +62,7 @@ private class CompositeComponentVariant(private val head: ComponentVariant, priv
 }
 
 fun ComponentVariant.thenIf(condition: Boolean, produce: () -> ComponentVariant): ComponentVariant {
-    return this
-        .then(if (condition) produce() else ComponentVariant.Empty)
+    return if (condition) this.then(produce()) else this
 }
 
 fun ComponentVariant.thenUnless(condition: Boolean, produce: () -> ComponentVariant): ComponentVariant {
@@ -84,14 +79,14 @@ fun ComponentVariant.thenUnless(condition: Boolean, other: ComponentVariant): Co
 
 /**
  * A convenience method for folding a list of component variants into one single one that represents all of them.
+ *
+ * Returns `null` if the collection is empty or entirely `null`.
  */
 @Composable
-fun Iterable<ComponentVariant?>.combine(): ComponentVariant {
-    var finalVariant: ComponentVariant = ComponentVariant.Empty
-    for (variant in this) {
-        finalVariant = finalVariant.then(variant ?: ComponentVariant.Empty)
+fun Iterable<ComponentVariant?>.combine(): ComponentVariant? {
+    return reduceOrNull { acc, variant ->
+        if (acc != null && variant != null) acc.then(variant) else acc ?: variant
     }
-    return finalVariant
 }
 
 /**

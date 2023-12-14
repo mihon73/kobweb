@@ -6,7 +6,8 @@ import org.jetbrains.compose.web.css.*
 @DslMarker
 annotation class GridDslMarker
 
-typealias CSSFlexValue = CSSSizeValue<out CSSUnitFlex>
+@Deprecated("Use `CSSFlexNumericValue` instead", ReplaceWith("CSSFlexNumericValue"))
+typealias CSSFlexValue = CSSFlexNumericValue
 
 // TODO(#168): Remove before v1.0
 @Deprecated("Use GridEntry.TrackSize instead", ReplaceWith("GridEntry.TrackSize"))
@@ -27,35 +28,36 @@ sealed class GridEntry(private val value: String) {
      */
     sealed class TrackSize(value: String) : GridEntry(value) {
         /** A size which tells the track to be as small as possible while still fitting all of its contents. */
-        class FitContent internal constructor(value: CSSLengthOrPercentageValue) : TrackSize("fit-content($value)")
+        class FitContent internal constructor(value: CSSLengthOrPercentageNumericValue) :
+            TrackSize("fit-content($value)")
 
         /** A size which represents a range of values this track can be. */
         class MinMax internal constructor(internal val min: Inflexible, internal val max: TrackSize) :
             TrackSize("minmax($min, $max)")
 
         /** Represents a track size which is a flex value (e.g. `1fr`) */
-        class Flex internal constructor(value: String) : TrackSize(value)
+        class Flex internal constructor(value: CSSFlexNumericValue) : TrackSize(value.toString())
 
         /** Like [TrackSize] but excludes flex values (e.g. `1fr`). */
         sealed class Inflexible(value: String) : TrackSize(value)
 
         /** Represents a track size defined by a keyword (e.g. `auto`). */
-        class Keyword internal constructor(value: String) : Inflexible(value)
+        internal class Keyword(value: String) : Inflexible(value)
 
         /** Represents a track size which is fixed, either a length or percentage value (e.g. `100px`, `40%`). */
-        class Fixed internal constructor(value: String) : Inflexible(value)
+        class Fixed internal constructor(value: CSSLengthOrPercentageNumericValue) : Inflexible(value.toString())
 
         companion object {
-            val Auto get() = Keyword("auto")
-            val MinContent get() = Keyword("min-content")
-            val MaxContent get() = Keyword("max-content")
+            val Auto: Inflexible get() = Keyword("auto")
+            val MinContent: Inflexible get() = Keyword("min-content")
+            val MaxContent: Inflexible get() = Keyword("max-content")
 
-            operator fun invoke(value: CSSLengthOrPercentageValue) = Fixed(value.toString())
-            operator fun invoke(value: CSSFlexValue) = Flex(value.toString())
+            operator fun invoke(value: CSSLengthOrPercentageNumericValue) = Fixed(value)
+            operator fun invoke(value: CSSFlexNumericValue) = Flex(value)
 
             fun minmax(min: Inflexible, max: TrackSize) = MinMax(min, max)
 
-            fun fitContent(value: CSSLengthOrPercentageValue) = FitContent(value)
+            fun fitContent(value: CSSLengthOrPercentageNumericValue) = FitContent(value)
         }
     }
 
@@ -155,11 +157,11 @@ abstract class GridTrackBuilderInRepeat {
         tracks.add(track)
     }
 
-    fun size(value: CSSLengthOrPercentageValue) = size(GridEntry.TrackSize(value))
+    fun size(value: CSSLengthOrPercentageNumericValue) = size(GridEntry.TrackSize(value))
 
-    fun size(value: CSSFlexValue) = size(GridEntry.TrackSize(value))
+    fun size(value: CSSFlexNumericValue) = size(GridEntry.TrackSize(value))
 
-    fun fitContent(value: CSSLengthOrPercentageValue) = size(GridEntry.TrackSize.fitContent(value))
+    fun fitContent(value: CSSLengthOrPercentageNumericValue) = size(GridEntry.TrackSize.fitContent(value))
 
     fun minmax(min: GridEntry.TrackSize.Inflexible, max: GridEntry.TrackSize) =
         size(GridEntry.TrackSize.minmax(min, max))
@@ -167,17 +169,17 @@ abstract class GridTrackBuilderInRepeat {
     fun minmax(min: GridEntry.TrackSize.Fixed, max: GridEntry.TrackSize) =
         size(GridEntry.TrackSize.minmax(min, max))
 
-    fun minmax(min: GridEntry.TrackSize.Inflexible, max: CSSFlexValue) = minmax(min, GridEntry.TrackSize(max))
+    fun minmax(min: GridEntry.TrackSize.Inflexible, max: CSSFlexNumericValue) = minmax(min, GridEntry.TrackSize(max))
 
-    fun minmax(min: GridEntry.TrackSize.Inflexible, max: CSSLengthOrPercentageValue) =
+    fun minmax(min: GridEntry.TrackSize.Inflexible, max: CSSLengthOrPercentageNumericValue) =
         minmax(min, GridEntry.TrackSize(max))
 
-    fun minmax(min: CSSLengthOrPercentageValue, max: GridEntry.TrackSize) = minmax(GridEntry.TrackSize(min), max)
+    fun minmax(min: CSSLengthOrPercentageNumericValue, max: GridEntry.TrackSize) = minmax(GridEntry.TrackSize(min), max)
 
-    fun minmax(min: CSSLengthOrPercentageValue, max: CSSLengthOrPercentageValue) =
+    fun minmax(min: CSSLengthOrPercentageNumericValue, max: CSSLengthOrPercentageNumericValue) =
         minmax(GridEntry.TrackSize(min), GridEntry.TrackSize(max))
 
-    fun minmax(min: CSSLengthOrPercentageValue, max: CSSFlexValue) =
+    fun minmax(min: CSSLengthOrPercentageNumericValue, max: CSSFlexNumericValue) =
         minmax(GridEntry.TrackSize(min), GridEntry.TrackSize(max))
 
     fun lineNames(vararg names: String) {
@@ -200,24 +202,22 @@ class GridTrackBuilder : GridTrackBuilderInRepeat() {
     }
 }
 
-sealed class GridAuto private constructor(private val value: String) : StylePropertyValue {
+class GridAuto private constructor(private val value: String) : StylePropertyValue {
     override fun toString() = value
-
-    class Keyword internal constructor(value: String) : GridAuto(value)
 
     companion object {
         // Keywords
-        val None get() = Keyword("none")
+        val None get() = GridAuto("none")
 
         // Global values
-        val Inherit get() = Keyword("inherit")
-        val Initial get() = Keyword("initial")
-        val Revert get() = Keyword("revert")
-        val Unset get() = Keyword("unset")
+        val Inherit get() = GridAuto("inherit")
+        val Initial get() = GridAuto("initial")
+        val Revert get() = GridAuto("revert")
+        val Unset get() = GridAuto("unset")
     }
 }
 
-fun StyleScope.gridAutoColumns(gridAutoColumns: GridAuto.Keyword) {
+fun StyleScope.gridAutoColumns(gridAutoColumns: GridAuto) {
     gridAutoColumns(gridAutoColumns.toString())
 }
 
@@ -229,7 +229,7 @@ fun StyleScope.gridAutoColumns(block: GridTrackBuilder.() -> Unit) {
     gridAutoColumns(GridTrackBuilder().apply(block).tracks.toTrackListString())
 }
 
-fun StyleScope.gridAutoRows(gridAutoRows: GridAuto.Keyword) {
+fun StyleScope.gridAutoRows(gridAutoRows: GridAuto) {
     gridAutoRows(gridAutoRows.toString())
 }
 
@@ -244,29 +244,57 @@ fun StyleScope.gridAutoRows(block: GridTrackBuilder.() -> Unit) {
 /**
  * Represents all possible values that can be passed into a CSS grid property.
  *
- * Note: "subgrid" and "masonry" purposely excluded as they are not widely supported
- * See also: https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Subgrid
+ * Note: "masonry" purposely excluded as it's not widely supported
  * See also: https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Masonry_layout
  *
- * See also: https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template
+ * @see <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/grid-template">Grid Template</a>
  */
 sealed class GridTemplate private constructor(private val value: String) : StylePropertyValue {
     override fun toString() = value
 
-    class Keyword internal constructor(value: String) : GridTemplate(value)
+    private class Keyword(value: String) : GridTemplate(value)
+
+    class Subgrid(block: (Builder.() -> Unit)? = null) : GridTemplate("subgrid${buildNames(block)}") {
+        class Builder internal constructor() {
+            internal val names = mutableListOf<GridEntry>()
+
+            fun lineNames(vararg lineNames: String) {
+                names.add(GridEntry.lineNames(*lineNames))
+            }
+
+            // Don't use GridEntry.Repeat as it does not support name-only repeats
+            private fun internalRepeat(count: Any, lineNames: Array<out String>) {
+                val repeatTrack = GridEntry.TrackSize.Keyword("repeat($count, ${GridEntry.lineNames(*lineNames)})")
+                names.add(repeatTrack)
+            }
+
+            fun repeat(count: Int, vararg lineNames: String) = internalRepeat(count, lineNames)
+
+            fun repeatAutoFill(vararg lineNames: String) =
+                internalRepeat(GridEntry.Repeat.Auto.Type.AutoFill, lineNames)
+        }
+
+        internal companion object {
+            fun buildNames(block: (Builder.() -> Unit)? = null): String {
+                return if (block == null) "" else Builder().apply(block).names.joinToString(" ", prefix = " ")
+            }
+        }
+    }
+
     companion object {
         // Keywords
-        val None get() = Keyword("none")
+        val None: GridTemplate get() = Keyword("none")
+        val Subgrid: GridTemplate get() = Subgrid()
 
         // Global
-        val Initial get() = Keyword("initial")
-        val Inherit get() = Keyword("inherit")
-        val Revert get() = Keyword("revert")
-        val Unset get() = Keyword("unset")
+        val Initial: GridTemplate get() = Keyword("initial")
+        val Inherit: GridTemplate get() = Keyword("inherit")
+        val Revert: GridTemplate get() = Keyword("revert")
+        val Unset: GridTemplate get() = Keyword("unset")
     }
 }
 
-fun StyleScope.gridTemplateColumns(gridTemplateColumns: GridTemplate.Keyword) {
+fun StyleScope.gridTemplateColumns(gridTemplateColumns: GridTemplate) {
     gridTemplateColumns(gridTemplateColumns.toString())
 }
 
@@ -278,7 +306,7 @@ fun StyleScope.gridTemplateColumns(block: GridTrackBuilder.() -> Unit) {
     gridTemplateColumns(GridTrackBuilder().apply(block).tracks.toTrackListString())
 }
 
-fun StyleScope.gridTemplateRows(gridTemplateRows: GridTemplate.Keyword) {
+fun StyleScope.gridTemplateRows(gridTemplateRows: GridTemplate) {
     gridTemplateRows(gridTemplateRows.toString())
 }
 
@@ -297,35 +325,51 @@ abstract class GridBuilderInAuto {
     protected var autoBuilder: GridBuilder? = null
 
     @Deprecated(
-        "`col` has been renamed to `column` to be more consistent with CSS API naming.",
-        ReplaceWith("column(value)")
+        "All grid column convenience APIs are being removed, and code should migrate to use `columns { ... }` for clarity and consistency with CSS APIs.",
+        ReplaceWith("columns { size(value) }")
     )
-    fun col(value: CSSLengthOrPercentageValue) {
-        column(value)
+    fun col(value: CSSLengthOrPercentageNumericValue) {
+        columns { size(value) }
     }
 
     @Deprecated(
-        "`col` has been renamed to `column` to be more consistent with CSS API naming.",
-        ReplaceWith("column(value)")
+        "All grid column convenience APIs are being removed, and code should migrate to use `columns { ... }` for clarity and consistency with CSS APIs.",
+        ReplaceWith("columns { size(value) }")
     )
-    fun col(value: CSSFlexValue) {
-        column(value)
+    fun col(value: CSSFlexNumericValue) {
+        columns { size(value) }
     }
 
-    fun column(value: CSSLengthOrPercentageValue) {
-        columns = GridTrackBuilder().apply { size(value) }.tracks
+    @Deprecated(
+        "All grid column convenience APIs are being removed, and code should migrate to use `columns { ... }` for clarity and consistency with CSS APIs.",
+        ReplaceWith("columns { size(value) }")
+    )
+    fun column(value: CSSLengthOrPercentageNumericValue) {
+        columns { size(value) }
     }
 
-    fun column(value: CSSFlexValue) {
-        columns = GridTrackBuilder().apply { size(value) }.tracks
+    @Deprecated(
+        "All grid column convenience APIs are being removed, and code should migrate to use `columns { ... }` for clarity and consistency with CSS APIs.",
+        ReplaceWith("columns { size(value) }")
+    )
+    fun column(value: CSSFlexNumericValue) {
+        columns { size(value) }
     }
 
-    fun row(value: CSSLengthOrPercentageValue) {
-        rows = GridTrackBuilder().apply { size(value) }.tracks
+    @Deprecated(
+        "All grid row convenience APIs are being removed, and code should migrate to use `rows { ... }` for clarity and consistency with CSS APIs.",
+        ReplaceWith("rows { size(value) }")
+    )
+    fun row(value: CSSLengthOrPercentageNumericValue) {
+        rows { size(value) }
     }
 
-    fun row(value: CSSFlexValue) {
-        rows = GridTrackBuilder().apply { size(value) }.tracks
+    @Deprecated(
+        "All grid row convenience APIs are being removed, and code should migrate to use `rows { ... }` for clarity and consistency with CSS APIs.",
+        ReplaceWith("rows { size(value) }")
+    )
+    fun row(value: CSSFlexNumericValue) {
+        rows { size(value) }
     }
 
     @Deprecated(
@@ -376,9 +420,9 @@ abstract class GridBuilderInAuto {
  *
  * // With the builder
  * Modifier.grid {
- *   cols { size(40.px); size(1.fr); repeat(3) { size(200.px) } }
+ *   columns { size(40.px); size(1.fr); repeat(3) { size(200.px) } }
  *   rows { size(1.fr); size(1.fr) }
- *   auto { column(50.px) }
+ *   auto { columns { size(50.px) } }
  * }
  * ```
  */

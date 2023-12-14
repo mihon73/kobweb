@@ -26,10 +26,13 @@ import org.jetbrains.compose.web.css.*
  * Unlike [SilkConfig] values, theme values are expected to be accessible in user projects via the [SilkTheme] object.
  */
 class MutableSilkTheme {
-    internal val componentStyles = mutableMapOf<String, ComponentStyle>()
-    internal val overriddenStyles = mutableSetOf<String>()
-    internal val componentVariants = mutableMapOf<String, ComponentVariant>()
-    internal val overriddenVariants = mutableSetOf<String>()
+    private val _componentStyles = mutableMapOf<String, ComponentStyle>()
+    internal val componentStyles: Map<String, ComponentStyle> = _componentStyles
+    private val overriddenStyles = mutableSetOf<String>()
+
+    private val _componentVariants = mutableMapOf<String, ComponentVariant>()
+    internal val componentVariants: Map<String, ComponentVariant> = _componentVariants
+    private val overriddenVariants = mutableSetOf<String>()
 
     val palettes = MutablePalettes()
     internal val legacyPalettes = LegacyMutableSilkPalettes(palettes)
@@ -73,8 +76,7 @@ class MutableSilkTheme {
                 If this was an intentional override, you should use `replaceComponentStyle` instead.
             """.trimIndent()
         }
-        componentStyles[style.name] = style
-        registerComponentVariants(*style.variants.toTypedArray())
+        _componentStyles[style.name] = style
     }
 
     /**
@@ -107,7 +109,7 @@ class MutableSilkTheme {
     ) {
         check(componentStyles.contains(style.name)) { "Attempting to replace a style that was never registered: \"${style.name}\"" }
         check(overriddenStyles.add(style.name)) { "Attempting to override style \"${style.name}\" twice" }
-        componentStyles[style.name] = ComponentStyle(style.nameWithoutPrefix, extraModifiers, style.prefix, init)
+        _componentStyles[style.name] = ComponentStyle(style.nameWithoutPrefix, extraModifiers, style.prefix, init)
     }
 
     /**
@@ -125,7 +127,7 @@ class MutableSilkTheme {
                 consider filing an issue at https://github.com/varabyte/kobweb/issues
             """.trimIndent()
             }
-            componentVariants[variant.style.name] = variant
+            _componentVariants[variant.style.name] = variant
         }
     }
 
@@ -164,7 +166,7 @@ class MutableSilkTheme {
 
         check(componentVariants.contains(variant.style.name)) { "Attempting to replace a variant that was never registered: \"${variant.style.name}\"" }
         check(overriddenVariants.add(variant.style.name)) { "Attempting to override variant \"${variant.style.name}\" twice" }
-        componentVariants[variant.style.name] = variant.baseStyle.addVariant(variant.name, extraModifiers, init)
+        _componentVariants[variant.style.name] = variant.baseStyle.addVariant(variant.name, extraModifiers, init)
     }
 }
 
@@ -355,7 +357,7 @@ class ImmutableSilkTheme(private val mutableSilkTheme: MutableSilkTheme) {
     val breakpoints = mutableSilkTheme.breakpoints
 
     private val _componentStyles = mutableMapOf<String, ImmutableComponentStyle>()
-    val componentStyles: Map<String, ImmutableComponentStyle> = _componentStyles
+    internal val componentStyles: Map<String, ImmutableComponentStyle> = _componentStyles
 
     // Note: We separate this function out from the SilkTheme constructor so we can construct it first and then call
     // this later. This allows ComponentStyles to reference SilkTheme in their logic, e.g. TextStyle:
@@ -371,13 +373,13 @@ class ImmutableSilkTheme(private val mutableSilkTheme: MutableSilkTheme) {
         // initialization blocks can reference `SilkTheme`.
         check(_SilkTheme != null)
         mutableSilkTheme.componentStyles.values.forEach { componentStyle ->
-            componentStyle.addStylesInto(componentStyleSheet)
-            _componentStyles[componentStyle.name] = componentStyle.intoImmutableStyle()
+            val classNames = componentStyle.addStylesInto(componentStyleSheet)
+            _componentStyles[componentStyle.name] = componentStyle.intoImmutableStyle(classNames)
         }
         // Variants should be defined after base styles to make sure they take priority if used
         mutableSilkTheme.componentVariants.values.filterIsInstance<SimpleComponentVariant>().forEach { variant ->
-            variant.addStylesInto(componentStyleSheet)
-            _componentStyles[variant.style.name] = variant.intoImmutableStyle()
+            val classNames = variant.addStylesInto(componentStyleSheet)
+            _componentStyles[variant.style.name] = variant.intoImmutableStyle(classNames)
         }
     }
 }
@@ -393,7 +395,8 @@ val SilkTheme: ImmutableSilkTheme
  * in a `@Composable` scope (which is common when defining ComponentStyles).
  */
 @Suppress("DEPRECATION")
-@Deprecated("Please migrate to `toPalette`, a more general, extensible API. Afterwards, you will need to additionally import palette properties (as they are extension properties).",
+@Deprecated(
+    "Please migrate to `toPalette`, a more general, extensible API. Afterwards, you will need to additionally import palette properties (as they are extension properties).",
     ReplaceWith("this.toPalette()", "com.varabyte.kobweb.silk.theme.colors.palette.toPalette")
 )
 fun ColorMode.toSilkPalette() = SilkTheme.legacyPalettes[this]

@@ -71,8 +71,9 @@ private fun BODY.buildIndicator() {
 
 fun createIndexFile(
     title: String,
-    headElements: Iterable<HEAD.() -> Unit>,
+    headInitializers: Iterable<HEAD.() -> Unit>,
     src: String,
+    scriptAttributes: Map<String, String>,
     buildTarget: BuildTarget
 ): String {
     return document {
@@ -82,7 +83,7 @@ fun createIndexFile(
 
                 head {
                     title(content = title)
-                    headElements.forEach { element -> this.element() }
+                    headInitializers.forEach { element -> this.element() }
                 }
 
                 body {
@@ -98,6 +99,7 @@ fun createIndexFile(
 
                     script {
                         this.src = src
+                        attributes.putAll(scriptAttributes)
                     }
                 }
             }

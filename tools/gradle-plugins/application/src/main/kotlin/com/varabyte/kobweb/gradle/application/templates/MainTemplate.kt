@@ -41,7 +41,7 @@ fun createMainFunction(
     buildList {
         val defaultImports = listOf(
             "androidx.compose.runtime.CompositionLocalProvider",
-            "$KOBWEB_GROUP.core.AppGlobalsLocal",
+            "$KOBWEB_GROUP.core.AppGlobals",
             "$KOBWEB_GROUP.navigation.RoutePrefix",
             "$KOBWEB_GROUP.navigation.Router",
             "$KOBWEB_GROUP.navigation.UpdateHistoryMode",
@@ -187,9 +187,7 @@ fun createMainFunction(
                 addStatement("")
             }.build())
 
-            val needsSilkInit = frontendData.silkInits.isNotEmpty() || frontendData.silkStyles.isNotEmpty()
-                || frontendData.silkVariants.isNotEmpty() || frontendData.keyframesList.isNotEmpty()
-            if (usingSilkFoundation && needsSilkInit) {
+            if (usingSilkFoundation) {
                 addCode(CodeBlock.builder().apply {
                     addStatement("$KOBWEB_GROUP.silk.init.additionalSilkInitialization = { ctx ->")
                     withIndent {
@@ -229,22 +227,19 @@ fun createMainFunction(
                 addStatement("val root = document.getElementById(\"root\")!!")
                 addStatement("while (root.firstChild != null) { root.removeChild(root.firstChild!!) }")
                 addStatement("")
+                addStatement(
+                    "AppGlobals.initialize(mapOf(${Array(appGlobals.size) { "%S to %S" }.joinToString()}))",
+                    *appGlobals.flatMap { entry -> listOf(entry.key, entry.value) }.toTypedArray()
+                )
                 addStatement("renderComposable(rootElementId = \"root\") {")
                 withIndent {
-                    addStatement(
-                        "CompositionLocalProvider(AppGlobalsLocal provides mapOf(${Array(appGlobals.size) { "%S to %S" }.joinToString()})) {",
-                        *appGlobals.flatMap { entry -> listOf(entry.key, entry.value) }.toTypedArray()
-                    )
+                    addStatement("$appFqn {")
                     withIndent {
-                        addStatement("$appFqn {")
-                        withIndent {
-                            if (usingSilkFoundation) {
-                                addStatement("router.renderActivePage { renderWithDeferred { it() } }")
-                            } else {
-                                addStatement("router.renderActivePage()")
-                            }
+                        if (usingSilkFoundation) {
+                            addStatement("router.renderActivePage { renderWithDeferred { it() } }")
+                        } else {
+                            addStatement("router.renderActivePage()")
                         }
-                        addStatement("}")
                     }
                     addStatement("}")
                 }

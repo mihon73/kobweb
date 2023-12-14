@@ -65,14 +65,25 @@ fun Image(
 }
 
 /**
- * Convenience version of [Image] with a non-optional [alt] parameter.
+ * Convenience version of `Image` where the alt description is not optional.
  *
- * Setting alt text is a common and encouraged use-case.
+ * We provide this convenience method since it is strongly encouraged to include a description with your
+ * images for accessibility reasons.
+ *
+ * Note that the parameter here is called `description` instead of `alt` to avoid ambiguity issues with the other
+ * `Image` method. In other words, because of this decision, you can write this code:
+ * ```
+ * Image(
+ * "/my-image.png",
+ * alt = "My image description",
+ * modifier = Modifier.stuff()
+ * ```
+ * and the compiler won't complain about getting confused between which method you're trying to call.
  */
 @Composable
 fun Image(
     src: String,
-    alt: String,
+    description: String,
     modifier: Modifier = Modifier,
     variant: ComponentVariant? = null,
     width: Int? = null,
@@ -80,5 +91,5 @@ fun Image(
     autoPrefix: Boolean = true,
     ref: ElementRefScope<HTMLImageElement>? = null,
 ) {
-    Image(src, modifier, variant, width, height, alt, autoPrefix, ref)
+    Image(src, modifier, variant, width, height, description, autoPrefix, ref)
 }

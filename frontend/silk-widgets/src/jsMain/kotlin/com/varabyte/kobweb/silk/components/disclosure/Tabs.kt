@@ -2,6 +2,7 @@ package com.varabyte.kobweb.silk.components.disclosure
 
 import androidx.compose.runtime.*
 import com.varabyte.kobweb.compose.css.*
+import com.varabyte.kobweb.compose.css.functions.calc
 import com.varabyte.kobweb.compose.dom.ElementRefScope
 import com.varabyte.kobweb.compose.foundation.layout.Box
 import com.varabyte.kobweb.compose.foundation.layout.BoxScope
@@ -14,9 +15,9 @@ import com.varabyte.kobweb.compose.ui.thenIf
 import com.varabyte.kobweb.silk.components.style.ComponentStyle
 import com.varabyte.kobweb.silk.components.style.ComponentVariant
 import com.varabyte.kobweb.silk.components.style.active
+import com.varabyte.kobweb.silk.components.style.ariaDisabled
 import com.varabyte.kobweb.silk.components.style.base
 import com.varabyte.kobweb.silk.components.style.common.DisabledStyle
-import com.varabyte.kobweb.silk.components.style.ariaDisabled
 import com.varabyte.kobweb.silk.components.style.hover
 import com.varabyte.kobweb.silk.components.style.not
 import com.varabyte.kobweb.silk.components.style.toModifier
@@ -36,7 +37,7 @@ object TabVars {
     val DisabledBackgroundColor by StyleVariable<CSSColorValue>(prefix = "silk")
     val HoverBackgroundColor by StyleVariable<CSSColorValue>(prefix = "silk")
     val PressedBackgroundColor by StyleVariable<CSSColorValue>(prefix = "silk")
-    val BorderThickness by StyleVariable<CSSLengthValue>(prefix = "silk", defaultFallback = 2.px)
+    val BorderThickness by StyleVariable<CSSLengthNumericValue>(prefix = "silk", defaultFallback = 2.px)
     val ColorTransitionDuration by StyleVariable(
         prefix = "silk",
         defaultFallback = TransitionDurationVars.Normal.value()

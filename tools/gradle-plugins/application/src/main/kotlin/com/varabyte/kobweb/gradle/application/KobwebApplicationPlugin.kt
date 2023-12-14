@@ -2,8 +2,9 @@ package com.varabyte.kobweb.gradle.application
 
 import com.varabyte.kobweb.ProcessorMode
 import com.varabyte.kobweb.gradle.application.buildservices.KobwebTaskListener
+import com.varabyte.kobweb.gradle.application.extensions.app
 import com.varabyte.kobweb.gradle.application.extensions.createAppBlock
-import com.varabyte.kobweb.gradle.application.extensions.createExportBlock
+import com.varabyte.kobweb.gradle.application.extensions.export
 import com.varabyte.kobweb.gradle.application.ksp.kspBackendFile
 import com.varabyte.kobweb.gradle.application.ksp.kspFrontendFile
 import com.varabyte.kobweb.gradle.application.tasks.KobwebBrowserCacheIdTask
@@ -13,6 +14,7 @@ import com.varabyte.kobweb.gradle.application.tasks.KobwebExportTask
 import com.varabyte.kobweb.gradle.application.tasks.KobwebGenerateApisFactoryTask
 import com.varabyte.kobweb.gradle.application.tasks.KobwebGenerateSiteEntryTask
 import com.varabyte.kobweb.gradle.application.tasks.KobwebGenerateSiteIndexTask
+import com.varabyte.kobweb.gradle.application.tasks.KobwebGenerateTask
 import com.varabyte.kobweb.gradle.application.tasks.KobwebStartTask
 import com.varabyte.kobweb.gradle.application.tasks.KobwebStopTask
 import com.varabyte.kobweb.gradle.application.tasks.KobwebUnpackServerJarTask
@@ -47,12 +49,15 @@ import org.gradle.api.tasks.TaskProvider
 import org.gradle.build.event.BuildEventsListenerRegistry
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.extra
+import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
 import org.gradle.tooling.events.FailureResult
 import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpack
 import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
+import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import javax.inject.Inject
 import kotlin.io.path.exists
 import kotlin.io.path.readText
@@ -93,8 +98,7 @@ class KobwebApplicationPlugin @Inject constructor(
         }
 
         val kobwebBlock = project.kobwebBlock.apply {
-            createAppBlock(kobwebConf)
-            createExportBlock()
+            createAppBlock(kobwebFolder, kobwebConf)
         }
 
         val env =
@@ -128,7 +132,7 @@ class KobwebApplicationPlugin @Inject constructor(
             dependsOn(kobwebUnpackServerJarTask)
             doLast {
                 val devScript = kobwebConf.server.files.dev.script
-                if (!project.file(devScript).exists()) {
+                if (env == ServerEnvironment.DEV && !project.file(devScript).exists()) {
                     throw GradleException(
                         "e: Your .kobweb/conf.yaml dev script (\"$devScript\") could not be found. This will cause " +
                             "the page to fail to load with a 500 error. Perhaps search your build/ directory for " +
@@ -145,6 +149,7 @@ class KobwebApplicationPlugin @Inject constructor(
         )
         kobwebCleanSiteTask.configure {
             doLast {
+                kobwebBlock.app.export.traceConfig.orNull?.let { traceConfig -> project.delete(traceConfig.root) }
                 project.delete(kobwebConf.server.files.prod.siteRoot)
             }
         }
@@ -210,9 +215,6 @@ class KobwebApplicationPlugin @Inject constructor(
         }
         buildEventsListenerRegistry.onTaskCompletion(taskListenerService)
 
-        // TODO: below we add generated kobweb sources to the generatedByKsp... source sets. This is done to prevent KSP
-        //  from processing them, but ideally we should probably create our own source set for this instead?
-        // Note: we use `matching` instead of `named` for the ksp source sets because they don't exist yet at this point
         project.buildTargets.withType<KotlinJsIrTarget>().configureEach {
             val jsTarget = JsTarget(this)
             project.hackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode()
@@ -241,8 +243,9 @@ class KobwebApplicationPlugin @Inject constructor(
                 }
             }
 
-            project.kotlin.sourceSets.matching { it.name == jsTarget.kspSourceSet }.configureEach {
-                kotlin.srcDir(kobwebGenSiteEntryTask)
+            // Register generated sources directly to compileKotlin task so that KSP doesn't process them
+            project.tasks.named<Kotlin2JsCompile>(jsTarget.compileKotlin) {
+                source(kobwebGenSiteEntryTask)
             }
 
             project.kotlin.sourceSets.named(jsTarget.mainSourceSet) {
@@ -301,9 +304,18 @@ class KobwebApplicationPlugin @Inject constructor(
                 kspGenFile.set(project.kspBackendFile(jvmTarget))
             }
 
-            project.kotlin.sourceSets.matching { it.name == jvmTarget.kspSourceSet }.configureEach {
-                kotlin.srcDir(kobwebGenApisFactoryTask)
+            // Register generated sources directly to compileKotlin task so that KSP doesn't process them
+            project.tasks.named<KotlinJvmCompile>(jvmTarget.compileKotlin) {
+                source(kobwebGenApisFactoryTask)
             }
+        }
+
+        // Convenience task in case you quickly want to run all "kobwebGen..." tasks
+        project.tasks.register("kobwebGenAll") {
+            group = "kobweb"
+            description = "Run all Kobweb code generation tasks"
+
+            dependsOn(project.tasks.withType<KobwebGenerateTask>())
         }
     }
 }

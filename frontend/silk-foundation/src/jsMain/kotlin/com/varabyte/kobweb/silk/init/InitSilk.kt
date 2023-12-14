@@ -1,5 +1,6 @@
 package com.varabyte.kobweb.silk.init
 
+import com.varabyte.kobweb.compose.util.invokeLater
 import com.varabyte.kobweb.silk.SilkStyleSheet
 import com.varabyte.kobweb.silk.components.layout.breakpoint.DisplayIfAtLeastLgStyle
 import com.varabyte.kobweb.silk.components.layout.breakpoint.DisplayIfAtLeastMdStyle
@@ -16,6 +17,13 @@ import com.varabyte.kobweb.silk.theme.ImmutableSilkTheme
 import com.varabyte.kobweb.silk.theme.MutableSilkTheme
 import com.varabyte.kobweb.silk.theme.SilkTheme
 import com.varabyte.kobweb.silk.theme._SilkTheme
+import kotlinx.browser.document
+import kotlinx.browser.window
+import org.w3c.dom.asList
+import org.w3c.dom.css.CSSGroupingRule
+import org.w3c.dom.css.CSSRule
+import org.w3c.dom.css.CSSStyleRule
+import org.w3c.dom.css.CSSStyleSheet
 
 /**
  * An annotation which identifies a function as one which will be called when the page opens, before DOM nodes are
@@ -51,17 +59,61 @@ fun initSilk(additionalInit: (InitSilkContext) -> Unit = {}) {
     additionalInit(ctx)
     additionalSilkInitialization(ctx)
 
-    // Declare "DisplayIf" styles last, which gives it extra specificity
-    mutableTheme.registerComponentStyle(DisplayIfAtLeastZeroStyle)
-    mutableTheme.registerComponentStyle(DisplayIfAtLeastSmStyle)
-    mutableTheme.registerComponentStyle(DisplayIfAtLeastMdStyle)
-    mutableTheme.registerComponentStyle(DisplayIfAtLeastLgStyle)
-    mutableTheme.registerComponentStyle(DisplayIfAtLeastXlStyle)
-    mutableTheme.registerComponentStyle(DisplayUntilZeroStyle)
-    mutableTheme.registerComponentStyle(DisplayUntilSmStyle)
-    mutableTheme.registerComponentStyle(DisplayUntilMdStyle)
-    mutableTheme.registerComponentStyle(DisplayUntilLgStyle)
-    mutableTheme.registerComponentStyle(DisplayUntilXlStyle)
+    // Hack alert: Compose HTML does NOT support setting the !important flag on styles, which is in general a good thing
+    // However, we really want to make an exception for display styles, because if someone uses a method like
+    // "displayIfAtLeast(MD)" then we want the display to really be none even if inline styles are present.
+    // Without !important, this code would not work, which isn't expected:
+    //
+    // Div(
+    //   Modifier
+    //     .displayIfAtLeast(MD)
+    //     .grid { row(1.fr); column(1.fr) }
+    // )
+    //
+    // `grid` sets the display type to "grid", which overrides the `display: none` from `displayIfAtLeast`
+    // See below for where we find these styles and update them to use !important.
+    val displayStyles = listOf(
+        DisplayIfAtLeastZeroStyle,
+        DisplayIfAtLeastSmStyle,
+        DisplayIfAtLeastMdStyle,
+        DisplayIfAtLeastLgStyle,
+        DisplayIfAtLeastXlStyle,
+        DisplayUntilZeroStyle,
+        DisplayUntilSmStyle,
+        DisplayUntilMdStyle,
+        DisplayUntilLgStyle,
+        DisplayUntilXlStyle,
+    )
+    displayStyles.forEach { mutableTheme.registerComponentStyle(it) }
+    // Next, run through all styles in the stylesheet and update the ones associated with our display styles. Note that
+    // a real solution would be if the Compose HTML APIs allowed us to identify a style as important, but currently, as
+    // you can see with their code here: https://github.com/JetBrains/compose-multiplatform/blob/9e25001e9e3a6be96668e38c7f0bd222c54d1388/html/core/src/jsMain/kotlin/org/jetbrains/compose/web/elements/Style.kt#L116
+    // they don't support it. (There would have to be a version of the API that takes an additional priority parameter,
+    // as in `setProperty("x", "y", "important")`)
+    window.invokeLater { // invokeLater gives the engine time to register Silk styles into the stylesheet objects first
+        val displayStyleSelectorNames = displayStyles.map { ".${it.name}" }.toSet()
+        document.styleSheets.asList()
+            .filterIsInstance<CSSStyleSheet>()
+            // Trying to peek at external stylesheets causes a security exception so step over them
+            .filter { it.href == null }
+            .forEach { styleSheet ->
+                styleSheet.cssRules.asList()
+                    .filterIsInstance<CSSGroupingRule>()
+                    // Note: We know all display styles use media rules, but if we ever want to support
+                    // "important" more generally, we'd have to handle at least STYLE_RULE as well
+                    .filter { rule -> rule.type == CSSRule.MEDIA_RULE }
+                    .forEach { rule ->
+                        rule.cssRules.asList().filterIsInstance<CSSStyleRule>().forEach { innerRule ->
+                            val selectorText = innerRule.selectorText
+                            val innerStyle = innerRule.style
+                            if (selectorText in displayStyleSelectorNames) {
+                                val displayValue = innerStyle.getPropertyValue("display")
+                                innerStyle.setProperty("display", displayValue, "important")
+                            }
+                        }
+                    }
+            }
+    }
 
     MutableSilkConfigInstance = config
 
